@@ -3,8 +3,9 @@
 
 Hook for Claude Code and OpenAI Codex, events UserPromptSubmit and Stop.
 
-- Stop: if the agent's last answer contains a close marker (default:
-  "Next step — Git"), the session is marked closed. If the session went over
+- Stop: if a line of the agent's last answer starts with a close marker
+  (default: "Next step — Git"), the session is marked closed. A marker quoted
+  mid-sentence (e.g. in a plan) does not count. If the session went over
   its token budget and has not closed, the agent is asked ONCE to write a
   checkpoint and close.
 - UserPromptSubmit: a new prompt in a closed or over-budget session is blocked
@@ -139,6 +140,24 @@ def last_assistant_text(data):
     return text
 
 
+def marker_pattern(marker):
+    """Marcador como regex; o separador " — " aceita também –, - e : (com ou sem espaços)."""
+    parts = re.split(r'\s*[—–]\s*', marker)
+    return r'\s*[—–:-]\s*'.join(re.escape(x) for x in parts)
+
+
+def closes_task(msg, markers):
+    """True if a line of the answer starts with a close marker (heading, bold or plain).
+
+    Mentioning the marker mid-sentence ("at the end I'll add the Next step — Git block")
+    does not close the session; only the block itself, starting a line, does.
+    """
+    for m in markers or []:
+        if m and re.search(r'(?m)^[ \t]*(?:#{1,6}[ \t]+|>[ \t]*)?(?:\*\*|__)?' + marker_pattern(m), msg):
+            return True
+    return False
+
+
 def handle(data):
     """Return the JSON object to print, or None to print nothing."""
     event = data.get('hook_event_name')
@@ -154,7 +173,7 @@ def handle(data):
 
     if event == 'Stop':
         msg = last_assistant_text(data)
-        if any(m and m in msg for m in cfg.get('close_markers') or []):
+        if closes_task(msg, cfg.get('close_markers')):
             state['closed'] = True
             save_state(sid, state)
             return {}

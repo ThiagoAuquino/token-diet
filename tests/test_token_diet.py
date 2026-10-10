@@ -146,6 +146,12 @@ class GuardTests(unittest.TestCase):
         self.assertEqual(out['decision'], 'block')
         self.assertIsNone(self.run_guard(self.base('UserPromptSubmit', prompt='commit it #same-session')))
 
+    def test_marker_mid_sentence_does_not_close(self):
+        self.config()
+        plan = 'Plan:\n| 5 | Close | end with the "Next step — Git" block |\nApprove?'
+        self.assertEqual(self.run_guard(self.base('Stop', last_assistant_message=plan)), {})
+        self.assertIsNone(self.run_guard(self.base('UserPromptSubmit', prompt='approved')))
+
     def test_budget_asks_checkpoint_once(self):
         self.config(max_session_input_tokens=200000)
         first = self.run_guard(self.base('Stop', last_assistant_message='working'))
