@@ -1,0 +1,11 @@
+{
+  "_doc": "token-diet session guard. Save as .token-diet.json in a project (or ~/.config/token-diet/config.json for all projects).",
+  "session_guard": {
+    "enabled": true,
+    "max_session_input_tokens": 3500000,
+    "max_context_tokens": null,
+    "block_after_close": true,
+    "close_markers": ["Next step — Git"],
+    "bypass_token": "#same-session"
+  }
+}

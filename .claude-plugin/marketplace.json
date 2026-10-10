@@ -1,0 +1,17 @@
+{
+  "name": "token-diet",
+  "owner": {
+    "name": "Thiago Auquino"
+  },
+  "metadata": {
+    "description": "token-diet: measure and cut token consumption of AI coding agents.",
+    "version": "0.1.0"
+  },
+  "plugins": [
+    {
+      "name": "token-diet",
+      "source": "./plugins/token-diet",
+      "description": "Measure and cut token consumption of AI coding agents: session analyzer, always-loaded context audit, one-task-per-session guard and an improvement loop."
+    }
+  ]
+}

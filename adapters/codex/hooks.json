@@ -1,0 +1,10 @@
+{
+  "hooks": {
+    "UserPromptSubmit": [
+      { "hooks": [ { "type": "command", "command": "python3 {{TOKEN_DIET}}/scripts/session_guard.py", "timeout": 15 } ] }
+    ],
+    "Stop": [
+      { "hooks": [ { "type": "command", "command": "python3 {{TOKEN_DIET}}/scripts/session_guard.py", "timeout": 15 } ] }
+    ]
+  }
+}

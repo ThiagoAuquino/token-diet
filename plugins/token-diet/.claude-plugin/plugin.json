@@ -1,0 +1,8 @@
+{
+  "name": "token-diet",
+  "version": "0.1.0",
+  "description": "Measure and cut token consumption of AI coding agents (Claude Code, Codex, any AGENTS.md tool) without losing quality.",
+  "author": { "name": "Thiago Auquino (Auquitech)" },
+  "license": "Apache-2.0",
+  "keywords": ["tokens", "cost", "context", "usage-limits", "codex", "agents-md", "skills"]
+}
