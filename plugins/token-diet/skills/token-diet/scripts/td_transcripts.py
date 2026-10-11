@@ -47,7 +47,7 @@ def _new_session(path, tool):
         'models': set(), 'is_subagent': False, 'calls': [],
         'tool_calls': 0, 'polls': 0, 'sleeps': 0, 'escalations': 0,
         'approvals_reviewer': None, 'service_tier': None, 'session_total_input': None,
-        'pending_tools': {}, 'tool_outputs': [], 'tool_inputs': [],
+        'pending_tools': {}, 'tool_outputs': [], 'tool_inputs': [], 'attachments': {}, 'user_text_chars': 0,
     }
 
 
@@ -155,12 +155,21 @@ def parse_claude(path):
             s['cwd'] = s['cwd'] or obj.get('cwd')
             if obj.get('isSidechain'):
                 s['is_subagent'] = True
+            if obj.get('type') == 'attachment' and isinstance(obj.get('attachment'), dict):
+                att = obj['attachment']
+                kind = att.get('type') or '?'
+                s['attachments'][kind] = s['attachments'].get(kind, 0) + len(json.dumps(att, ensure_ascii=False))
+                continue
             if obj.get('type') == 'user':
                 content = (obj.get('message') or {}).get('content')
-                if isinstance(content, list):
+                if isinstance(content, str):
+                    s['user_text_chars'] += len(content)
+                elif isinstance(content, list):
                     for block in content:
                         if isinstance(block, dict) and block.get('type') == 'tool_result':
                             _record_output(s, block.get('tool_use_id'), block.get('content'))
+                        elif isinstance(block, dict) and block.get('type') == 'text':
+                            s['user_text_chars'] += len(block.get('text') or '')
                 continue
             if obj.get('type') != 'assistant':
                 continue
@@ -228,6 +237,8 @@ def summarize(s):
         'top_tool_outputs': sorted(s['tool_outputs'], key=lambda o: -o['chars'])[:10],
         'tool_input_chars': sum(o['chars'] for o in s['tool_inputs']),
         'top_tool_inputs': sorted(s['tool_inputs'], key=lambda o: -o['chars'])[:10],
+        'attachments': sorted(s['attachments'].items(), key=lambda kv: -kv[1]),
+        'user_text_chars': s['user_text_chars'],
     }
 
 

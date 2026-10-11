@@ -129,7 +129,15 @@ def main(argv=None):
         if a.top:
             print(f"    what stays in the context (estimates, chars/4): tool outputs ≈{human(r['tool_output_chars'] // 4)}, "
                   f"tool inputs written by the model (code, edits, commands) ≈{human(r['tool_input_chars'] // 4)}, "
-                  f"model output tokens {human(r['output_tokens'])}")
+                  f"model output tokens {human(r['output_tokens'])}, "
+                  f"user messages and text injected by the tool/IDE ≈{human(r['user_text_chars'] // 4)}")
+            known = r['ctx_first'] + (r['tool_output_chars'] + r['tool_input_chars'] + r['user_text_chars']) // 4 + r['output_tokens']
+            if r['ctx_peak'] > known:
+                print(f"    not explained by start + tool I/O + model output: ≈{human(r['ctx_peak'] - known)} at the peak "
+                      f"(context added by the tool itself: reminders, attachments, notifications, re-read files)")
+            if r['attachments']:
+                print('    attachments recorded by the tool (chars/4; not all are necessarily sent to the model): '
+                      + ', '.join(f"{k} {human(v // 4)}" for k, v in r['attachments'][:a.top]))
             for title, key in (('biggest tool outputs', 'top_tool_outputs'), ('biggest tool inputs', 'top_tool_inputs')):
                 if r[key]:
                     print(f"    {title}:")
