@@ -11,6 +11,7 @@ Usage:
   analyze_sessions.py --since 2026-10-01 --project my-repo
   analyze_sessions.py path/to/session.jsonl [...]
   analyze_sessions.py --json                # machine-readable
+  analyze_sessions.py --last 1 --top 5      # what filled the context (biggest tool outputs)
 
 Default roots: ~/.claude/projects and ${CODEX_HOME:-~/.codex}/sessions.
 "Input tokens" = sum over model calls of the tokens sent in that call
@@ -82,6 +83,7 @@ def main(argv=None):
     ap.add_argument('--last', type=int, default=10, help='newest N sessions (default 10, 0 = all)')
     ap.add_argument('--include-subagents', action='store_true', help='list subagent sessions separately')
     ap.add_argument('--json', action='store_true')
+    ap.add_argument('--top', type=int, default=0, help='show the N biggest tool outputs per session (what filled the context)')
     for k, v in DEF.items():
         ap.add_argument('--' + k.replace('_', '-'), type=int, default=v, dest=k)
     a = ap.parse_args(argv)
@@ -124,6 +126,15 @@ def main(argv=None):
               f"{r['polls'] + r['sleeps']:>5}")
         for fd in r['findings']:
             print(f"    {fd['rule']}: {fd['text']}")
+        if a.top:
+            print(f"    what stays in the context (estimates, chars/4): tool outputs ≈{human(r['tool_output_chars'] // 4)}, "
+                  f"tool inputs written by the model (code, edits, commands) ≈{human(r['tool_input_chars'] // 4)}, "
+                  f"model output tokens {human(r['output_tokens'])}")
+            for title, key in (('biggest tool outputs', 'top_tool_outputs'), ('biggest tool inputs', 'top_tool_inputs')):
+                if r[key]:
+                    print(f"    {title}:")
+                    for o in r[key][:a.top]:
+                        print(f"      {human(o['chars'] // 4):>6}  {o['tool']}")
     if sub_total:
         print(f"\nSubagent sessions in range: {human(sub_total)} input tokens (TD-08; --include-subagents to list).")
     print('\nRules: see skills/token-diet/references/playbook.md')

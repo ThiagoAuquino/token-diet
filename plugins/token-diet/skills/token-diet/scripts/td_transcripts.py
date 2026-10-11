@@ -47,7 +47,30 @@ def _new_session(path, tool):
         'models': set(), 'is_subagent': False, 'calls': [],
         'tool_calls': 0, 'polls': 0, 'sleeps': 0, 'escalations': 0,
         'approvals_reviewer': None, 'service_tier': None, 'session_total_input': None,
+        'pending_tools': {}, 'tool_outputs': [], 'tool_inputs': [],
     }
+
+
+def _short(name, args):
+    """One-line label for a tool call: file path or command when present."""
+    if isinstance(args, str):
+        try:
+            args = json.loads(args)
+        except ValueError:
+            return f'{name}: {args[:80]}'
+    if isinstance(args, dict):
+        for key in ('file_path', 'path', 'command', 'cmd', 'pattern', 'url', 'query'):
+            if args.get(key):
+                return f'{name}: {str(args[key])[:80]}'
+    return name
+
+
+def _record_output(s, call_id, content):
+    label = s['pending_tools'].pop(call_id, None)
+    if label is None:
+        return
+    text = content if isinstance(content, str) else json.dumps(content, ensure_ascii=False)
+    s['tool_outputs'].append({'tool': label, 'chars': len(text)})
 
 
 def parse_codex(path):
@@ -94,10 +117,15 @@ def parse_codex(path):
                 if total.get('input_tokens') != s['session_total_input']:
                     s['calls'].append(call)
                     s['session_total_input'] = total.get('input_tokens')
+            elif t == 'response_item' and pt in ('custom_tool_call_output', 'function_call_output'):
+                _record_output(s, p.get('call_id'), p.get('output'))
             elif t == 'response_item' and pt in ('custom_tool_call', 'function_call'):
                 s['tool_calls'] += 1
                 name = p.get('name') or ''
                 args = str(p.get('input') or p.get('arguments') or '')
+                if p.get('call_id'):
+                    s['pending_tools'][p['call_id']] = _short(name, p.get('input') or p.get('arguments'))
+                s['tool_inputs'].append({'tool': _short(name, p.get('input') or p.get('arguments')), 'chars': len(args)})
                 if name in POLL_TOOL_NAMES or ('write_stdin' in args and 'chars:""' in args and 'exec_command' not in args):
                     s['polls'] += 1
                 if 'sleep ' in args or name == 'sleep':
@@ -127,6 +155,13 @@ def parse_claude(path):
             s['cwd'] = s['cwd'] or obj.get('cwd')
             if obj.get('isSidechain'):
                 s['is_subagent'] = True
+            if obj.get('type') == 'user':
+                content = (obj.get('message') or {}).get('content')
+                if isinstance(content, list):
+                    for block in content:
+                        if isinstance(block, dict) and block.get('type') == 'tool_result':
+                            _record_output(s, block.get('tool_use_id'), block.get('content'))
+                continue
             if obj.get('type') != 'assistant':
                 continue
             msg = obj.get('message') or {}
@@ -137,6 +172,9 @@ def parse_claude(path):
                     s['tool_calls'] += 1
                     name = block.get('name') or ''
                     cmd = json.dumps(block.get('input') or {})
+                    if block.get('id'):
+                        s['pending_tools'][block['id']] = _short(name, block.get('input'))
+                    s['tool_inputs'].append({'tool': _short(name, block.get('input')), 'chars': len(cmd)})
                     if name in POLL_TOOL_NAMES:
                         s['polls'] += 1
                     if name == 'Bash' and 'sleep ' in cmd:
@@ -186,6 +224,10 @@ def summarize(s):
         'tool_calls': s['tool_calls'], 'polls': s['polls'], 'sleeps': s['sleeps'],
         'escalations': s['escalations'],
         'approvals_reviewer': s['approvals_reviewer'], 'service_tier': s['service_tier'],
+        'tool_output_chars': sum(o['chars'] for o in s['tool_outputs']),
+        'top_tool_outputs': sorted(s['tool_outputs'], key=lambda o: -o['chars'])[:10],
+        'tool_input_chars': sum(o['chars'] for o in s['tool_inputs']),
+        'top_tool_inputs': sorted(s['tool_inputs'], key=lambda o: -o['chars'])[:10],
     }
 
 
