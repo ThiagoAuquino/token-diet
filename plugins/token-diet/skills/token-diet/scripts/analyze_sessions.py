@@ -133,8 +133,9 @@ def main(argv=None):
                   f"user messages and text injected by the tool/IDE ≈{human(r['user_text_chars'] // 4)}")
             known = r['ctx_first'] + (r['tool_output_chars'] + r['tool_input_chars'] + r['user_text_chars']) // 4 + r['output_tokens']
             if r['ctx_peak'] > known:
-                print(f"    not explained by start + tool I/O + model output: ≈{human(r['ctx_peak'] - known)} at the peak "
-                      f"(context added by the tool itself: reminders, attachments, notifications, re-read files)")
+                print(f"    gap between the peak and these estimates: ≈{human(r['ctx_peak'] - known)} "
+                      f"(chars/4 undercounts code and non-English text; reasoning and tool-added text are not all in the log; "
+                      f"use the tool's own context view, e.g. /context in Claude Code, for the exact split)")
             if r['attachments']:
                 print('    attachments recorded by the tool (chars/4; not all are necessarily sent to the model): '
                       + ', '.join(f"{k} {human(v // 4)}" for k, v in r['attachments'][:a.top]))
