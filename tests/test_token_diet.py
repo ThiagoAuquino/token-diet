@@ -90,6 +90,17 @@ class TranscriptTests(unittest.TestCase):
         self.assertEqual(r['calls'], 2)
         self.assertEqual(r['input_tokens'], 50000)
 
+    def test_top_tool_outputs(self):
+        p = os.path.join(self.tmp, 's2.jsonl')
+        rows = claude_rows([20000])
+        rows[1]['message']['content'].append({'type': 'tool_use', 'id': 't1', 'name': 'Read',
+                                              'input': {'file_path': '/repo/big.xsd'}})
+        rows.append({'type': 'user', 'sessionId': 's1', 'message': {'role': 'user', 'content': [
+            {'type': 'tool_result', 'tool_use_id': 't1', 'content': 'x' * 4000}]}})
+        write_jsonl(p, rows)
+        r = td_transcripts.summarize(td_transcripts.parse(p))
+        self.assertEqual(r['top_tool_outputs'][0], {'tool': 'Read: /repo/big.xsd', 'chars': 4000})
+
     def test_garbage_is_ignored(self):
         p = os.path.join(self.tmp, 'bad.jsonl')
         with open(p, 'w') as fh:
@@ -151,6 +162,16 @@ class GuardTests(unittest.TestCase):
         plan = 'Plan:\n| 5 | Close | end with the "Next step — Git" block |\nApprove?'
         self.assertEqual(self.run_guard(self.base('Stop', last_assistant_message=plan)), {})
         self.assertIsNone(self.run_guard(self.base('UserPromptSubmit', prompt='approved')))
+
+    def test_mid_turn_check_is_opt_in_and_once(self):
+        payload = self.base('PostToolUse', tool_name='Bash')
+        self.config(max_context_tokens=120000)
+        self.assertIsNone(self.run_guard(payload))          # off by default
+        self.config(max_context_tokens=120000, check_during_turn=True)
+        out = self.run_guard(payload)                       # last call context = 150k
+        self.assertIn('ceiling', out['hookSpecificOutput']['additionalContext'])
+        self.assertIsNone(self.run_guard(payload))          # only once
+        self.assertEqual(self.run_guard(self.base('Stop', last_assistant_message='working')), {})
 
     def test_budget_asks_checkpoint_once(self):
         self.config(max_session_input_tokens=200000)

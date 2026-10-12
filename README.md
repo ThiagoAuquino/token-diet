@@ -70,6 +70,10 @@ Off until a config file enables it. Create `.token-diet.json` in a project
 - Over the budget → the agent is asked once to checkpoint and close; new
   prompts are blocked.
 - `#same-session` in a prompt lets it through (e.g. "write the commit message").
+- Optional `"max_context_tokens"` + `"check_during_turn": true`: after each tool call
+  (`PostToolUse`, documented in Claude Code and Codex) the agent is told once, mid-turn,
+  to checkpoint when the context passes the ceiling. Without it, the ceiling is only
+  checked at the end of a turn, and long autonomous turns can overshoot it.
 - Claude Code: hooks come with the plugin. Codex: see
   [adapters/codex](adapters/codex/README.md) (needs `/hooks` trust).
 

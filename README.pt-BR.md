@@ -74,6 +74,10 @@ todos):
 - Acima do orçamento → o agente recebe uma única instrução para registrar
   checkpoint e fechar; novos pedidos são bloqueados.
 - `#same-session` no texto libera (ex.: "escreva a mensagem de commit").
+- Opcional `"max_context_tokens"` + `"check_during_turn": true`: depois de cada
+  ferramenta (`PostToolUse`, documentado no Claude Code e no Codex) o agente recebe uma
+  única instrução, no meio do turno, para fazer checkpoint quando o contexto passa do
+  teto. Sem isso, o teto só é conferido no fim do turno e turnos longos podem passar dele.
 - Claude Code: os hooks vêm com o plugin. Codex: ver
   [adapters/codex](adapters/codex/README.md) (exige confiar em `/hooks`).
 

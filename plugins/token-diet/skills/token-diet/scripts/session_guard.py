@@ -8,6 +8,9 @@ Hook for Claude Code and OpenAI Codex, events UserPromptSubmit and Stop.
   mid-sentence (e.g. in a plan) does not count. If the session went over
   its token budget and has not closed, the agent is asked ONCE to write a
   checkpoint and close.
+- PostToolUse (optional, "check_during_turn": true): after each tool call, if the
+  context passed max_context_tokens, the agent is told ONCE, mid-turn, to finish the
+  current step, checkpoint and close. Off by default; exits immediately when off.
 - UserPromptSubmit: a new prompt in a closed or over-budget session is blocked
   with "open a new session". Including the bypass token (default "#same-session")
   in the prompt lets it through.
@@ -36,6 +39,7 @@ DEFAULTS = {
     'block_after_close': True,
     'close_markers': ['Next step — Git'],
     'bypass_token': '#same-session',
+    'check_during_turn': False,
 }
 LOCAL_NAME = '.token-diet.json'
 
@@ -158,15 +162,64 @@ def closes_task(msg, markers):
     return False
 
 
+def last_context(transcript_path, tail_bytes=262144):
+    """Context of the latest model call, reading only the end of the transcript (cheap per tool call)."""
+    try:
+        with open(transcript_path, 'rb') as fh:
+            fh.seek(0, os.SEEK_END)
+            size = fh.tell()
+            fh.seek(max(0, size - tail_bytes))
+            lines = fh.read().decode('utf-8', 'replace').splitlines()
+    except Exception:
+        return None
+    for line in reversed(lines):
+        try:
+            if '"token_count"' in line:
+                info = (json.loads(line).get('payload') or {}).get('info') or {}
+                v = (info.get('last_token_usage') or {}).get('input_tokens')
+                if v:
+                    return v
+            elif '"usage"' in line and '"assistant"' in line:
+                u = (json.loads(line).get('message') or {}).get('usage') or {}
+                return (u.get('input_tokens') or 0) + (u.get('cache_creation_input_tokens') or 0) \
+                    + (u.get('cache_read_input_tokens') or 0)
+        except ValueError:
+            continue
+    return None
+
+
 def handle(data):
     """Return the JSON object to print, or None to print nothing."""
     event = data.get('hook_event_name')
     cfg = load_config(data.get('cwd'))
+    if event == 'PostToolUse' and not cfg.get('check_during_turn'):
+        return None
     if not cfg.get('enabled'):
         return {} if event == 'Stop' else None
 
     sid = data.get('session_id')
     state = load_state(sid)
+
+    if event == 'PostToolUse':
+        climit = cfg.get('max_context_tokens')
+        if not cfg.get('check_during_turn') or not climit or state.get('checkpoint_requested') or state.get('closed'):
+            return None
+        ctx = last_context(data.get('transcript_path'))
+        if ctx is None or ctx < climit:
+            return None
+        state['checkpoint_requested'] = True
+        save_state(sid, state)
+        marker = (cfg.get('close_markers') or ['Next step'])[0]
+        return {'hookSpecificOutput': {
+            'hookEventName': 'PostToolUse',
+            'additionalContext': (
+                f'token-diet: session context is {fmt(ctx)} tokens (ceiling {fmt(climit)}). '
+                'Finish only the current step, start nothing new, write a checkpoint to the project notes '
+                '(current state, what is left, next step), end with the "' + marker + '" block and tell '
+                'the user to continue in a new session.'
+            ),
+        }}
+
     total = ctx = None
     if data.get('transcript_path'):
         total, ctx = td_transcripts.session_input_total(data['transcript_path'])
